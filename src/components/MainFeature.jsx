@@ -20,6 +20,12 @@ const MainFeature = () => {
   })
   const [isRacing, setIsRacing] = useState(false)
   const [raceTime, setRaceTime] = useState(0)
+  const [currentLap, setCurrentLap] = useState(1)
+  const [racePosition, setRacePosition] = useState(1)
+  const [raceProgress, setRaceProgress] = useState(0)
+  const [showResults, setShowResults] = useState(false)
+  const [raceResults, setRaceResults] = useState(null)
+  const [lastLapTime, setLastLapTime] = useState(0)
 
   const tracks = [
     { id: 'mario_circuit', name: 'Speed Circuit', difficulty: 'Easy', laps: 3 },
@@ -49,6 +55,38 @@ const MainFeature = () => {
     if (isRacing) {
       interval = setInterval(() => {
         setRaceTime(time => time + 1)
+        
+        // Simulate race progress
+        setRaceProgress(prev => {
+          const newProgress = prev + (100 / (raceConfig.laps * 60)) // Approximate 1 minute per lap
+          
+          // Check for lap completion
+          const lapProgress = (newProgress / 100) * raceConfig.laps
+          const newLap = Math.floor(lapProgress) + 1
+          
+          if (newLap > currentLap && newLap <= raceConfig.laps) {
+            setCurrentLap(newLap)
+            setLastLapTime(raceTime)
+            toast.success(`Lap ${currentLap} completed! Time: ${formatTime(raceTime - lastLapTime)}`)
+            
+            // Simulate position changes
+            const positionChange = Math.random()
+            if (positionChange > 0.7 && racePosition > 1) {
+              setRacePosition(pos => pos - 1)
+              toast.info(`Great driving! You're now in position ${racePosition - 1}!`)
+            } else if (positionChange < 0.3 && racePosition < raceConfig.players) {
+              setRacePosition(pos => pos + 1)
+              toast.warning(`Watch out! You dropped to position ${racePosition + 1}`)
+            }
+          }
+          
+          // Check for race completion
+          if (newProgress >= 100) {
+            completeRace()
+          }
+          
+          return Math.min(newProgress, 100)
+        })
       }, 1000)
     } else if (!isRacing && raceTime !== 0) {
       clearInterval(interval)
@@ -62,6 +100,22 @@ const MainFeature = () => {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
+  const completeRace = () => {
+    setIsRacing(false)
+    const finalResults = {
+      track: tracks.find(t => t.id === raceConfig.track)?.name,
+      finalPosition: racePosition,
+      totalTime: formatTime(raceTime),
+      totalPlayers: raceConfig.players,
+      lapsCompleted: raceConfig.laps,
+      averageLapTime: formatTime(Math.floor(raceTime / raceConfig.laps))
+    }
+    setRaceResults(finalResults)
+    setShowResults(true)
+    
+    toast.success(`🏁 Race completed! You finished in position ${racePosition}/${raceConfig.players}!`)
+  }
+
   const handleStartRace = () => {
     if (!kartConfig.player_name.trim()) {
       toast.error("Please enter your racer name!")
@@ -70,19 +124,27 @@ const MainFeature = () => {
 
     setIsRacing(true)
     setRaceTime(0)
+    setCurrentLap(1)
+    setRacePosition(Math.floor(Math.random() * Math.min(4, raceConfig.players)) + 1) // Start in a random position 1-4
+    setRaceProgress(0)
+    setLastLapTime(0)
     toast.success(`Race started on ${tracks.find(t => t.id === raceConfig.track)?.name}!`)
-    
-    // Simulate race completion after 30 seconds
-    setTimeout(() => {
-      setIsRacing(false)
-      const finalTime = raceTime + 30
-      toast.success(`Race completed! Your time: ${formatTime(finalTime)}`)
-    }, 30000)
+    toast.info(`You're starting in position ${racePosition}/${raceConfig.players}`)
   }
 
   const handleStopRace = () => {
     setIsRacing(false)
+    setRaceTime(0)
+    setCurrentLap(1)
+    setRacePosition(1)
+    setRaceProgress(0)
+    setLastLapTime(0)
     toast.info("Race stopped")
+  }
+
+  const handleNewRace = () => {
+    setShowResults(false)
+    setRaceResults(null)
   }
 
   const handleConfigChange = (section, field, value) => {
@@ -103,6 +165,85 @@ const MainFeature = () => {
   }
 
   return (
+    <>
+      {/* Race Results Modal */}
+      <AnimatePresence>
+        {showResults && raceResults && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowResults(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              className="bg-white dark:bg-surface-800 rounded-2xl p-8 max-w-md w-full shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-center">
+                <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center">
+                  <ApperIcon name="Trophy" className="h-10 w-10 text-white" />
+                </div>
+                
+                <h3 className="text-2xl font-bold text-surface-900 dark:text-white mb-2">
+                  Race Complete!
+                </h3>
+                
+                <div className="text-6xl font-bold mb-4">
+                  {raceResults.finalPosition === 1 && <span className="text-yellow-500">🥇</span>}
+                  {raceResults.finalPosition === 2 && <span className="text-gray-400">🥈</span>}
+                  {raceResults.finalPosition === 3 && <span className="text-amber-600">🥉</span>}
+                  {raceResults.finalPosition > 3 && <span className="text-surface-500">🏁</span>}
+                </div>
+                
+                <div className="space-y-4 text-left bg-surface-50 dark:bg-surface-700 p-4 rounded-xl">
+                  <div className="flex justify-between">
+                    <span className="text-surface-600 dark:text-surface-400">Track:</span>
+                    <span className="font-semibold text-surface-900 dark:text-white">{raceResults.track}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-surface-600 dark:text-surface-400">Final Position:</span>
+                    <span className="font-semibold text-surface-900 dark:text-white">
+                      {raceResults.finalPosition}/{raceResults.totalPlayers}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-surface-600 dark:text-surface-400">Total Time:</span>
+                    <span className="font-semibold text-surface-900 dark:text-white">{raceResults.totalTime}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-surface-600 dark:text-surface-400">Laps:</span>
+                    <span className="font-semibold text-surface-900 dark:text-white">{raceResults.lapsCompleted}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-surface-600 dark:text-surface-400">Avg Lap Time:</span>
+                    <span className="font-semibold text-surface-900 dark:text-white">{raceResults.averageLapTime}</span>
+                  </div>
+                </div>
+                
+                <div className="flex gap-3 mt-6">
+                  <button
+                    onClick={handleNewRace}
+                    className="flex-1 bg-gradient-to-r from-primary to-accent text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all duration-300"
+                  >
+                    New Race
+                  </button>
+                  <button
+                    onClick={() => setShowResults(false)}
+                    className="flex-1 border-2 border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-300 px-6 py-3 rounded-xl font-semibold hover:border-primary hover:text-primary transition-all duration-300"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     <div className="w-full max-w-6xl mx-auto">
       {/* Racing Status Display */}
       <AnimatePresence>
@@ -124,8 +265,16 @@ const MainFeature = () => {
                 </div>
               </div>
               <div className="text-center">
-                <div className="text-3xl font-bold">{formatTime(raceTime)}</div>
+                <div className="text-2xl font-bold">{formatTime(raceTime)}</div>
                 <div className="text-sm opacity-90">Current Time</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold">Lap {currentLap}/{raceConfig.laps}</div>
+                <div className="text-sm opacity-90">Current Lap</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold">P{racePosition}</div>
+                <div className="text-sm opacity-90">Position</div>
               </div>
               <button
                 onClick={handleStopRace}
@@ -133,6 +282,26 @@ const MainFeature = () => {
               >
                 Stop Race
               </button>
+            </div>
+            
+            {/* Race Progress Bar */}
+            <div className="mt-6">
+              <div className="flex justify-between text-sm opacity-90 mb-2">
+                <span>Race Progress</span>
+                <span>{Math.round(raceProgress)}%</span>
+              </div>
+              <div className="w-full bg-white/20 rounded-full h-3">
+                <motion.div
+                  className="bg-white h-3 rounded-full"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${raceProgress}%` }}
+                  transition={{ duration: 0.5 }}
+                />
+              </div>
+              <div className="flex justify-between text-xs opacity-75 mt-1">
+                <span>Start</span>
+                <span>Finish</span>
+              </div>
             </div>
           </motion.div>
         )}
@@ -546,6 +715,7 @@ const MainFeature = () => {
         </div>
       </div>
     </div>
+    </>
   )
 }
 
